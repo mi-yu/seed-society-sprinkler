@@ -770,4 +770,5 @@ export type Gardener = {
   authority: PublicKey;
   bump: number;
   initialized: boolean;
+  pubkey: PublicKey;
 };

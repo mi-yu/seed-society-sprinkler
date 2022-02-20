@@ -1,4 +1,4 @@
-import { Program, Provider, Wallet } from "@project-serum/anchor";
+import { Program, Provider, utils, Wallet } from "@project-serum/anchor";
 import {
   AccountInfo,
   Connection,
@@ -15,8 +15,6 @@ import base58 from "bs58";
 import { logger } from "./logger";
 import {
   DEAD_THRESHOLD,
-  GARDENER,
-  OWNED_TUBER,
   RPC_URL,
   SEED_SOCIETY_PROGRAM_ID,
   TUBER_FREEZE_AUTHORITY,
@@ -24,10 +22,10 @@ import {
   WALLET_KEY,
 } from "./constants";
 import { Gardener, IDL, Plant, SeedSociety } from "./idl";
+import axios from "axios";
 
 export class Sprinkler {
   private program: Program<SeedSociety>;
-  private gardener: Promise<Gardener>;
 
   constructor() {
     const connection = new Connection(RPC_URL);
@@ -43,13 +41,30 @@ export class Sprinkler {
           )
         : undefined
     );
-    this.gardener = this.program.account.gardener.fetch(
-      GARDENER
-    ) as Promise<any>;
   }
 
   async process() {
     try {
+      const ownedPlants = await this.getOwnedPlants();
+      if (!ownedPlants.length) {
+        logger.error(
+          `No tubers owned by ${this.program.provider.wallet.publicKey.toBase58()}`
+        );
+        return;
+      } else {
+        logger.info(
+          `Wallet ${this.program.provider.wallet.publicKey.toBase58()} owns ${
+            ownedPlants.length
+          } plants`
+        );
+      }
+      const owned = new PublicKey(ownedPlants[0].mint);
+      const ownedATA = await getAssociatedTokenAddress(
+        owned,
+        this.program.provider.wallet.publicKey
+      );
+      const ownedMetadata = await Metadata.getPDA(owned);
+
       // Sort by oldest waterTimeout, then level
       const plants = (await this.getPlants()).sort((a, b) => {
         if (a.waterTimeout.toNumber() !== b.waterTimeout.toNumber()) {
@@ -57,7 +72,8 @@ export class Sprinkler {
         }
         return a.level - b.level;
       });
-      const gardener = await this.gardener;
+      const [gardenerPk] = await this.getGardener();
+      const gardener = await this.program.account.gardener.fetch(gardenerPk);
 
       logger.info(`Fetched ${plants.length} plants`);
 
@@ -76,29 +92,35 @@ export class Sprinkler {
       const remainingWaters = Math.max(5 - gardener.wateredInTimeframe, 0);
       logger.info(`Remaining waters: ${remainingWaters}`);
 
-      for (const batch of inBatches(
-        waterablePlants.slice(0, remainingWaters),
-        30
-      )) {
-        await Promise.allSettled(batch.map((p) => this.waterPlant(p)));
+      for (const batch of inBatches(waterablePlants.slice(0, 5), 30)) {
+        await Promise.allSettled(
+          batch.map((p) =>
+            this.waterPlant(
+              p,
+              { ...gardener, pubkey: gardenerPk },
+              owned,
+              ownedATA,
+              ownedMetadata
+            )
+          )
+        );
       }
     } catch (e) {
       logger.error(e);
     }
   }
 
-  private async waterPlant(plant: Plant) {
-    const [gardener, tuberATA, tuberMetadata, plantATA, plantMetadata] =
-      await Promise.all([
-        this.gardener,
-        getAssociatedTokenAddress(
-          OWNED_TUBER,
-          this.program.provider.wallet.publicKey
-        ),
-        Metadata.getPDA(OWNED_TUBER),
-        getAssociatedTokenAddress(plant.mint, plant.owner),
-        Metadata.getPDA(plant.mint),
-      ]);
+  private async waterPlant(
+    plant: Plant,
+    gardener: Gardener,
+    ownedMint: PublicKey,
+    ownedATA: PublicKey,
+    ownedMetadata: PublicKey
+  ) {
+    const [plantATA, plantMetadata] = await Promise.all([
+      getAssociatedTokenAddress(plant.mint, plant.owner),
+      Metadata.getPDA(plant.mint),
+    ]);
     logger.info(`watering plant ${plant.pubkey.toBase58()}`);
 
     try {
@@ -108,10 +130,10 @@ export class Sprinkler {
         {
           accounts: {
             plant: plant.pubkey,
-            gardener: GARDENER,
-            ownedPlantMint: OWNED_TUBER,
-            ownedPlantToken: tuberATA,
-            ownedMetadata: tuberMetadata,
+            gardener: gardener.pubkey,
+            ownedPlantMint: ownedMint,
+            ownedPlantToken: ownedATA,
+            ownedMetadata: ownedMetadata,
             plantMint: plant.mint,
             plantToken: plantATA,
             plantMetadata,
@@ -208,19 +230,26 @@ export class Sprinkler {
     }
   }
 
-  private plantToJSON(p: Plant) {
-    const nextWater = new Date(p.waterTimeout.toNumber() * 1000);
-    return {
-      ...p,
-      name: Buffer.from(p.name)
-        .filter((b) => b > 0)
-        .toString(),
-      mint: p.mint.toBase58(),
-      owner: p.owner.toBase58(),
-      pubkey: p.pubkey.toBase58(),
-      waterTimeout: nextWater,
-      canWater: new Date().getTime() >= nextWater.getTime(),
-    };
+  private async getGardener() {
+    return await PublicKey.findProgramAddress(
+      [
+        utils.bytes.utf8.encode("gardener"),
+        this.program.provider.wallet.publicKey.toBytes(),
+      ],
+      SEED_SOCIETY_PROGRAM_ID
+    );
+  }
+
+  private async getOwnedPlants() {
+    try {
+      const { data } = await axios.get<{ mint: string; name: string }[]>(
+        `https://3e7iuc6csg.execute-api.us-west-1.amazonaws.com/default/gm?owner=${this.program.provider.wallet.publicKey.toBase58()}`
+      );
+      return data;
+    } catch (e) {
+      logger.info(`Failed to fetch plants: ${e}`);
+      return [];
+    }
   }
 }
 
