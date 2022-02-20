@@ -11,8 +11,8 @@ export const TUBER_FREEZE_AUTHORITY = new PublicKey(
   "FRc1vu7f6boyh4RFvAdNowtojVmr6h5ELFbdXhWc6PoX"
 );
 
-// 7 days, in milliseconds
-export const DEAD_THRESHOLD = 7 * 24 * 60 * 60 * 1000;
+// 8 days, in milliseconds
+export const DEAD_THRESHOLD = 8 * 24 * 60 * 60 * 1000;
 
 // base58 encoded
 export const WALLET_KEY = process.env.WALLET_KEY || "";
