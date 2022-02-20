@@ -92,7 +92,10 @@ export class Sprinkler {
       const remainingWaters = Math.max(5 - gardener.wateredInTimeframe, 0);
       logger.info(`Remaining waters: ${remainingWaters}`);
 
-      for (const batch of inBatches(waterablePlants.slice(0, 5), 30)) {
+      for (const batch of inBatches(
+        waterablePlants.slice(0, remainingWaters),
+        30
+      )) {
         await Promise.allSettled(
           batch.map((p) =>
             this.waterPlant(
@@ -105,8 +108,8 @@ export class Sprinkler {
           )
         );
       }
-    } catch (e) {
-      logger.error(e);
+    } catch (e: any) {
+      logger.error(e.toString());
     }
   }
 
