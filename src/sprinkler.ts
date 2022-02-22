@@ -20,6 +20,7 @@ import {
   TUBER_FREEZE_AUTHORITY,
   TUBER_METADATA_AUTHORITY,
   WALLET_KEY,
+  WATERS_PER_DAY,
 } from "./constants";
 import { Gardener, IDL, Plant, SeedSociety } from "./idl";
 import axios from "axios";
@@ -88,8 +89,12 @@ export class Sprinkler {
         );
       });
       logger.info(`Found ${waterablePlants.length} waterable plants`);
+      const waterTimeout = new Date(gardener.waterTimeout.toNumber() * 1000);
+      const remainingWaters =
+        now.getTime() >= waterTimeout.getTime()
+          ? WATERS_PER_DAY
+          : Math.max(WATERS_PER_DAY - gardener.wateredInTimeframe, 0);
 
-      const remainingWaters = Math.max(5 - gardener.wateredInTimeframe, 0);
       logger.info(`Remaining waters: ${remainingWaters}`);
 
       for (const batch of inBatches(

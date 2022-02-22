@@ -10,6 +10,7 @@ export const TUBER_METADATA_AUTHORITY = new PublicKey(
 export const TUBER_FREEZE_AUTHORITY = new PublicKey(
   "FRc1vu7f6boyh4RFvAdNowtojVmr6h5ELFbdXhWc6PoX"
 );
+export const WATERS_PER_DAY = 5;
 
 // 8 days, in milliseconds
 export const DEAD_THRESHOLD = 8 * 24 * 60 * 60 * 1000;
