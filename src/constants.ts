@@ -13,7 +13,7 @@ export const TUBER_FREEZE_AUTHORITY = new PublicKey(
 export const WATERS_PER_DAY = 5;
 
 // 8 days, in milliseconds
-export const DEAD_THRESHOLD = 8 * 24 * 60 * 60 * 1000;
+export const DEAD_THRESHOLD = 7.5 * 24 * 60 * 60 * 1000;
 
 // base58 encoded
 export const WALLET_KEY = process.env.WALLET_KEY || "";

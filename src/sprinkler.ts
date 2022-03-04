@@ -11,8 +11,9 @@ import {
   Metadata,
   MetadataProgram,
 } from "@metaplex-foundation/mpl-token-metadata";
+import axios from "axios";
 import base58 from "bs58";
-import { logger } from "./logger";
+import { formatDistance } from "date-fns";
 import {
   DEAD_THRESHOLD,
   RPC_URL,
@@ -22,8 +23,8 @@ import {
   WALLET_KEY,
   WATERS_PER_DAY,
 } from "./constants";
+import { logger } from "./logger";
 import { Gardener, IDL, Plant, SeedSociety } from "./idl";
-import axios from "axios";
 
 export class Sprinkler {
   private program: Program<SeedSociety>;
@@ -97,22 +98,24 @@ export class Sprinkler {
 
       logger.info(`Remaining waters: ${remainingWaters}`);
 
-      for (const batch of inBatches(
-        waterablePlants.slice(0, remainingWaters),
-        30
-      )) {
-        await Promise.allSettled(
-          batch.map((p) =>
-            this.waterPlant(
-              p,
-              { ...gardener, pubkey: gardenerPk },
-              owned,
-              ownedATA,
-              ownedMetadata
-            )
-          )
-        );
-      }
+      await Promise.allSettled(
+        waterablePlants.slice(0, remainingWaters).map((p) => {
+          const distance = formatDistance(
+            Date.now(),
+            p.waterTimeout.toNumber() * 1000
+          );
+          logger.info(
+            `Plant ${p.pubkey.toBase58()} last watered ${distance} ago`
+          );
+          return this.waterPlant(
+            p,
+            { ...gardener, pubkey: gardenerPk },
+            owned,
+            ownedATA,
+            ownedMetadata
+          );
+        })
+      );
     } catch (e: any) {
       logger.error(e.toString());
     }
